@@ -1,0 +1,209 @@
+#!/bin/sh
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs none /dev
+
+exec < /dev/console > /dev/console 2>&1
+
+NTX_SYS_PART_TYPE="$(ntx_hwconfig -s -p /dev/mmcblk0 SysPartType)"
+echo "Netronix system partition type = ${NTX_SYS_PART_TYPE}"
+
+# find ROOT_DEVICE in kernel command line . 
+for parm in $(cat /proc/cmdline); do
+	case $parm in
+	ramfs)
+		RAMFS_MODE=1
+		;;  
+	root=*)
+		ROOT_DEVICE=`echo $parm | awk -F\= '{print $2}'`
+		;;
+	esac
+done
+
+if [ "x$ROOT_DEVICE" = "x" ]; then
+	ROOT_DEVICE=autoconfig
+fi
+
+
+
+
+# $1: the name of block device
+wait_for_blkdev_ready()
+{
+	blkdev=$1
+	wait_secs=$2
+	if [ -z "${wait_secs}" ];then
+		wait_secs=10
+	fi
+	CNT=${wait_secs}
+	while true; do
+		if [ -b "${blkdev}" ]; then
+			return 0
+		fi
+		
+		echo [$0]: Wait ${blkdev} ready \#${CNT}/${wait_secs}...
+		
+		CNT=`expr $CNT - 1`
+		if [ $CNT -eq 0 ]; then
+			echo [$0]: $1 is not available!
+			return 1
+		fi
+		sleep 1
+	done
+}
+
+# $1: The block device
+do_mount()
+{
+	mnt_blk_dev="$1"
+	fs_type="$2"
+	fs_mnt_pt="$3"
+	if [ "${fs_type}" = "ext4" ];then
+		echo "mount \"${mnt_blk_dev}\" as ${fs_type} @ \"${fs_mnt_pt}\""
+		e2fsck -y "${mnt_blk_dev}"
+		mount -o rw,noatime,nodiratime,norelatime,noauto_da_alloc,barrier=0,data=ordered -t "${fs_type}" "${mnt_blk_dev}" "${fs_mnt_pt}"
+		chk=$?
+	elif [ "${fs_type}" = "vfat" ];then
+		echo "mount \"${mnt_blk_dev}\" as ${fs_type} @ \"${fs_mnt_pt}\""
+		chk=1	
+	fi
+	if [ $chk -ne 0 ]; then
+		echo [$0]: Failed to mount $1!
+	fi
+}
+
+load_nand()
+{
+	echo [$0]: Try to load Nand ...
+	
+	wait_for_blkdev_ready /dev/nand0p5
+	if [ $? -eq 0 ]; then
+		do_mount /dev/nand0p5 ext4 /mnt
+	fi
+}
+
+load_emmc()
+{
+	echo [$0]: Try to load EMMC ...
+	
+	wait_for_blkdev_ready $ROOT_DEVICE
+	if [ $? -eq 0 ]; then
+		do_mount $ROOT_DEVICE ext4 /mnt
+	fi
+}
+
+ntx_firmware_install()
+{
+	ntx_fw_dir="/boot-resource"
+	ntx_fw_blkdev="/dev/mmcblk0p2"
+	fw_installed=0
+	mkdir "${ntx_fw_dir}"
+	mount -t vfat "${ntx_fw_blkdev}" "${ntx_fw_dir}"
+	ntx_fw_data_ready=$?
+	if [ ${ntx_fw_data_ready} = 0 ];then
+		cd "${ntx_fw_dir}"
+		if [ $? = 0 ];then
+			fw_installed=0
+			for fw_file in "ntx_hwconfig.bin" "ntxfw.bin" "waveform.bin" "env.fex"
+			do
+				if [ -e "${fw_file}" ];then
+					if [ "${fw_file}" = "ntx_hwconfig.bin" ];then
+						sec_no="1024"
+						VCOM_10mV_HiByte="$(ntx_hwconfig -s -p /dev/mmcblk0 VCOM_10mV_HiByte)"
+						VCOM_10mV_LoByte="$(ntx_hwconfig -s -p /dev/mmcblk0 VCOM_10mV_LoByte)"
+					elif [ "${fw_file}" = "ntxfw.bin" ];then
+						sec_no="1030"
+					elif [ "${fw_file}" = "waveform.bin" ];then
+						sec_no="16416"
+					elif [ "${fw_file}" = "env.fex" ];then
+						sec_no="1286"
+						echo "----- env content -----"
+						strings "${fw_file}"
+						echo "-----------------------"
+					else
+						echo "unsupported firmware type \"${fw_file}\""
+						sec_no=""
+					fi
+					if [ "${sec_no}" ];then
+						echo "install ${fw_file} @ ${sec_no} ..."
+						dd if="${fw_file}" bs=512 seek=${sec_no} of=/dev/mmcblk0
+						if [ "${fw_file}" = "ntx_hwconfig.bin" ];then
+							ntx_hwconfig -s /dev/mmcblk0 VCOM_10mV_HiByte ${VCOM_10mV_HiByte}
+							ntx_hwconfig -s /dev/mmcblk0 VCOM_10mV_LoByte ${VCOM_10mV_LoByte}
+						fi
+						sync
+						sleep 1
+						rm -f "${fw_file}"
+						sync
+						fw_installed=1
+					fi
+				fi
+			done
+			cd -
+		fi
+
+		if [ "${fw_installed}" = 1 ];then
+			echo "all firmware install done , rebooting ..."
+			sync
+			reboot -f
+		fi
+
+		return 0
+	fi
+
+	return 0
+}
+
+ntx_u2_process()
+{
+	#U2 Process
+	if [ ${NTX_SYS_PART_TYPE} = "TYPE20" ];then
+		echo "[B300] Initramfs Check U2 Flag"
+		cd /mnt/
+		mkdir flash
+		mount /dev/mmcblk0p1 /mnt/flash
+		if [ -f "/mnt/flash/U2/U2_EMMC" ];then
+			echo "[B300] Run U2_process_s1.sh "
+			cd /mnt/flash/U2
+			./U2_process_s1.sh
+			rm /mnt/flash/U2/U2_EMMC
+			reboot -f
+			echo "[B300] exit U2_process_s1.sh"
+			exit
+		fi
+	fi
+
+	return 0
+}
+
+ntx_firmware_install
+ntx_u2_process
+
+echo [$0]: RootDevice is \"$ROOT_DEVICE\"
+case $ROOT_DEVICE in
+	/dev/nand*|/dev/system)
+		load_nand
+		;;
+	/dev/mmc*)
+		load_emmc
+		;;
+	autoconfig*)
+		sleep 1;
+        if cat /proc/partitions|grep "$ROOT_DEVICE" >/dev/null;then
+            magic_num=$(hexdump -s 1292 -n 2 -x $ROOT_DEVICE|head -1|awk '{print $2 }')
+            if echo $magic_num|grep "f30a" >/dev/null;then
+				load_emmc
+            fi
+        else
+			load_nand
+		fi
+		;;
+	*)
+		echo [$0]: "Use default type"
+		;;
+esac
+
+[ -x /mnt/sbin/init ] && exec switch_root /mnt /sbin/init --bind /dev /dev
+/sbin/getty -L ttyS0 115200 vt100 -n -l /bin/ash
+

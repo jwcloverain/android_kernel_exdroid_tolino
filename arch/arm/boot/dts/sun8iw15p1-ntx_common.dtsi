@@ -1,0 +1,21 @@
+
+
+/{
+	usb_plug {
+		compatible = "usb_plug";
+	};
+	ntx_bl {
+		compatible = "ntx_bl";
+	};
+	ntx_led {
+		compatible = "ntx_led";
+	};
+	ntx_event0 {
+		compatible = "ntx_event0";
+	};
+	ntx_sunxi_ddr_auto_selfrefresh {
+		compatible = "allwinner,sunxi-ddr-auto-selfrefresh";
+		reg = <0x0 0x047fb030 0x0 0x4>;
+	};
+};
+

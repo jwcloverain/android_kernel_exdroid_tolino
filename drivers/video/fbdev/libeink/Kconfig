@@ -1,0 +1,50 @@
+#
+# EINK Library drivers configuration
+#
+
+menuconfig LIBEINK_SUPPORT
+	bool "EINK Library for reagl and eclipse use"
+	help
+	  Enable this to be able to EINK Library support.
+
+if LIBEINK_SUPPORT
+
+config EC060KH1_LIBEINK
+        tristate "EC060KH1 (CFA) libeink"
+	default m
+	help
+	  EC060KH1 panel (CFA) libeink support
+	  
+config EC060KH6_LIBEINK
+        tristate "EC060KH6 (BW) libeink"
+	default m
+	help
+	  EC060KH6 panel (BW) libeink support
+
+config ED103TH1_LIBEINK
+        tristate "ED103TH1 (BW) libeink"
+	default m
+	help
+	  ED103TH1 panel (BW) libeink support
+	  
+config ED070KH3_LIBEINK
+        tristate "ED070KH3 (BW) libeink"
+	default m
+	help
+	  ED070KH3 panel (BW) libeink support
+	  
+config ED080KH1_LIBEINK
+        tristate "ED080KH1 (BW) libeink"
+	default m
+	help
+	  ED080KH1 (BW) libeink support
+
+config ED060KHC_LIBEINK
+        tristate "ED060KHC (BW) libeink"
+        default m
+        help
+          ED060KHC (BW) libeink support
+
+
+endif # LIBEINK_SUPPORT
+
