@@ -29,7 +29,10 @@ jobs:
             gcc-arm-linux-gnueabihf device-tree-compiler cpio rsync curl patch
 
       - name: Apply kernel patch
-        run: patch -p1 --forward < patches/0001-enable-bakasu-manual-hook.patch
+        run: |
+          for patch_file in patches/*.patch; do
+            patch -p1 --forward < "$patch_file"
+          done
 
       - name: Integrate BakaSU
         run: |
