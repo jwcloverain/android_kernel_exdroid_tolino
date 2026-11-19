@@ -44,7 +44,10 @@ jobs:
         env:
           ARCH: arm
           CROSS_COMPILE: arm-linux-gnueabihf-
-        run: make sun8iw15p1smp_android_ntx_defconfig
+        run: |
+          make sun8iw15p1smp_android_ntx_defconfig
+          grep -Fx CONFIG_KSU=y .config
+          grep -Fx CONFIG_KSU_MANUAL_HOOK=y .config
 
       - name: Build kernel and device trees
         env:
