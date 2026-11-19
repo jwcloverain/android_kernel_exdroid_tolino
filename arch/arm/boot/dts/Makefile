@@ -841,7 +841,6 @@ dtb-$(CONFIG_ARCH_SUN8IW15P1) += \
 	sun8iw15p1-TA0P04_android.dtb \
 	sun8iw15p1-TA0P04.dtb \
 	sun8iw15p1-T60P02.dtb \
-	sun8iw15p1-ntx_boards.dtb \
 	sun8iw15p1-perf1.dtb
 dtb-$(CONFIG_ARCH_TANGO) += \
 	tango4-vantage-1172.dtb
