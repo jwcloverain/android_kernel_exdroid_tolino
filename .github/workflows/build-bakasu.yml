@@ -15,6 +15,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      HOSTCFLAGS: -fcommon
 
     steps:
       - name: Checkout kernel source
