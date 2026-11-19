@@ -1,0 +1,61 @@
+name: Build BakaSU kernel
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'arch/arm/configs/sun8iw15p1smp_android_ntx_defconfig'
+      - 'patches/**'
+      - '.github/workflows/build-bakasu.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
+            gcc-arm-linux-gnueabihf device-tree-compiler cpio rsync curl patch
+
+      - name: Apply kernel patch
+        run: patch -p1 --forward < patches/0001-enable-bakasu-manual-hook.patch
+
+      - name: Integrate BakaSU
+        run: |
+          curl -LSs https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh | bash
+          test -d drivers/kernelsu
+          test -f drivers/kernelsu/Kconfig
+
+      - name: Configure kernel
+        env:
+          ARCH: arm
+          CROSS_COMPILE: arm-linux-gnueabihf-
+        run: make sun8iw15p1smp_android_ntx_defconfig
+
+      - name: Build kernel and device trees
+        env:
+          ARCH: arm
+          CROSS_COMPILE: arm-linux-gnueabihf-
+        run: make -j"$(nproc)" zImage dtbs
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp arch/arm/boot/zImage artifacts/
+          find arch/arm/boot/dts -maxdepth 1 -name 'sun8iw15p1*.dtb' -exec cp {} artifacts/ \;
+          cp .config artifacts/kernel.config
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sun8iw15p1-bakasu-kernel
+          path: artifacts/
